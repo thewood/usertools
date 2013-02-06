@@ -1,0 +1,178 @@
+#!/bin/bash
+#usertools-elward.thomas
+#CIS 2434
+#Prof. S.Millichamp
+
+#touch ./tmpfile
+tempfile=tmpfile
+trap 'rm -f $tempfile' 0 1 2 3 15
+#couldn't get this to work....if i remember in basic it was like on error goto cleanup ha
+#or in java setting up exception throws and stuff
+
+
+############### functions #################
+
+help(){
+  #display help screen
+	echo ""
+	echo ""
+	echo -e "\t----usertools-elwardthomas------"
+	echo ""
+	echo ""
+	echo -e ""
+	echo -e "\t help :\tshows this screen\n"
+	echo -e "\t list_systemusers [file_name] :\n\t\t\tlist users in file or default /etc/passwd\n"
+	echo -e "\t count_canlogin [file_name] :\n\t\t\tdisplay users with shell ability to login\n"
+	echo -e "\t adduser :\n\t\t\tfollow prompts presented to\n\t\t\tadd new user to system\n"
+	echo -e "\t batchadd [file_name] [user_name_prefix] [user count] :\n\t\t\tmass user add service\n\t\t\tfile_name for where to store the creation information\n\t\t\tuser count [1-99]\n\t\t\tprefix for easily identifying users"
+	echo ""
+	echo ""
+
+}
+
+
+adduser(){
+	#general add user function
+	
+	echo -n "Please enter a Username: "
+	read USER_NAME #gets the name
+	if [[ -z "${USER_NAME}" ]]; then #checks for shenanigans
+		echo "ERROR: Must enter a username --exiting"
+		exit 4
+	else #continues on
+		echo -n "Please enter GECOS [user description [can be left blank]]: "
+		read USER_DESC #can be blank
+		echo -n "Please enter Shell type for account [use standard format /bin/[shellname] ...default /bin/bash]: "
+       	read SHELL_TYPE
+       	if [ -z $SHELL_TYPE ]; then #check if blank
+       		SHELL_TYPE="/bin/bash" #set to default bash shell
+       	fi
+       	if ! [[ -e $SHELL_TYPE ]]; then #check if found in /bin/ directory
+       		echo "ERROR: there is no record of that shell existing"
+       		exit 2
+       	fi 
+        	#echo "newuser_$USER_NAME::$SHELL_TYPE::$USER_DESC" #testing variables
+        	
+       	touch "newuser-$USER_NAME" #create new user file
+       	echo "$USER_NAME::::$USER_DESC:/home/$USER_NAME:$SHELL_TYPE" >> newuser-$USER_NAME #populate new user file
+       	#format reminder
+       	#username:password:pw_uid:pw_gid:pw_gecos:pw_dir:pw_shell
+       	
+       	# need sudo for this i don't remember if it was necessary condition...
+       	# mkdir "/home/$USER_NAME"
+       	exit 0
+    fi
+	
+}
+
+batchadd(){
+	
+	FILE=$FIRST_ARG
+	USER_PREFIX=$SEC_ARG
+	USER_COUNT=$THIRD_ARG
+	SHELL_TYPE="/bin/bash"
+	if [[ $USER_COUNT -gt 99 ]]; then #check user count
+		echo "ERROR: Cannot create more than 99 users"
+		exit 1
+	fi
+	if [[ -a $FILE ]]; then #check if file exists
+		echo "ERROR: Cannot Overwrite existing file(s)"
+		exit 2
+	fi
+	
+	for ((i=1; i <= $USER_COUNT; i++))
+   		do
+        	if [ $i -lt 10 ]; then        # If $i is smaller than 10
+            	TEMP_USER="username0$i"    # set username format with 01-09
+            	TEMP_DESC="username 0$i"
+        	else
+        	    TEMP_DESC="username $i"
+        	    TEMP_USER="username$i"     # set username format for 10-99
+        	fi
+
+        	echo "$TEMP_USER::::$TEMP_DESC:/home/$TEMP_USER:$SHELL_TYPE" >> "$tempfile"
+        	
+        	#echo $i
+        	#sleep 20 #timer to try and interrupt see trap working....but not
+        	
+	done
+	cat "$tempfile" >> $FILE
+	rm -f "$tempfile"
+	exit 0
+}
+
+can_login(){
+	
+	echo  -n "Total Users with shell login ability: "
+	awk -F':' '{if ($7 != "/sbin/nologin") print $1}' $FIRST_ARG > $tempfile 
+	
+	#awk -F':' '{if ($7 != "/bin/false") print $1}' $FIRST_ARG > $tempfile #ubuntu ver
+	#awk -F':' '{if ($7 != "/usr/bin/false") print $1}' $FIRST_ARG > $tempfile #osx ver
+	
+	#checks the 7th : as to whether or not it contains text
+	#then prints those users to a file...i wasn't sure if i was able to create an itterator
+	#to keep track of the amount listed in a single awk line? still kinda confused by what it does
+	#because i found the line below to basically get a line count of the file which is the output
+	#of the first awk command....
+	
+	awk 'BEGIN{i=0}{i++;}END{print i}' $tempfile
+	
+	rm -f $tempfile #removes tmp file created 
+	
+	#
+	
+	exit 0
+}
+
+error_file(){ #checks if files exist exits if they do not...
+	if ! [ -a $FIRST_ARG ]; then
+		echo "error: file path was not correct"
+		exit 1
+	fi
+}
+
+list_users(){
+
+	awk -F':' '{ if ($3 < 500) print $1 " : " $5 }' $FIRST_ARG | sort #if uid level less than 500 we print it 
+	exit 0
+
+}
+
+############### end functions #################
+
+
+
+############### main ###############
+
+FIRST_ARG=$2 #converting params into variables because i wasnt sure how bash handles 
+SEC_ARG=$3 # passing things into functions.....
+THIRD_ARG=$4
+
+    case "$1" in #case statement for selecting user entered params
+		
+		help) help ; exit 0;; #run help
+		
+		loggedin) who | more;; # shows users on system
+		
+		list_systemusers) #list people below 500
+			if [ -z $FIRST_ARG ]; then
+				FIRST_ARG="/etc/passwd"
+			fi
+			error_file
+			list_users;; 
+		
+		adduser) adduser;; #hm jump to function
+		
+		batchadd) batchadd;; #jump to function
+		
+		count_canlogin) # count the users who have ability to login
+			 
+			if [ -z $FIRST_ARG ]; then
+				FIRST_ARG="/etc/passwd"
+			fi
+			error_file
+			can_login ;;
+		
+		*) help; exit 1;;	
+
+    esac
